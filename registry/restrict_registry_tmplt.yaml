@@ -1,0 +1,32 @@
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: restrictregistry
+spec:
+  crd:
+    spec:
+      names:
+        kind: RestrictRegistry
+      validation:
+        openAPIV3Schema:
+          properties:
+            image:
+              type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package restrictregistry
+
+        registry_matches_any(str, patterns) {
+          startswith(str, patterns[_])
+        }
+
+        violation[{"msg": msg, "details": {"Registry should be": registries}}] {
+          input.review.object.kind == "Pod"
+          some i
+          image := input.review.object.spec.containers[i].image
+          registry_parameter := input.parameters.registry
+          registries := split(registry_parameter, ",")
+          not registry_matches_any(image, registries)
+          msg := sprintf("Forbidden registry: %v", [image])
+        }
